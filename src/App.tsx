@@ -1,7 +1,8 @@
 import * as React from 'react'
 import styled from 'styled-components'
-import { makeAutoObservable, action, runInAction } from 'mobx'
+import { makeAutoObservable, runInAction } from 'mobx'
 import { observer } from 'mobx-react-lite'
+
 enum Status {
   Dead,
   Alive
@@ -20,22 +21,19 @@ class SquareModel {
   }
 
   get livingNeighbors(): number {
-    const neighbors: SquareModel[] = []
-    if (this.x > 0) {
-      neighbors.push(board[this.x - 1][this.y])
-      if (this.y > 0) neighbors.push(board[this.x - 1][this.y - 1])
-      if (this.y < board[this.x].length - 1)
-        neighbors.push(board[this.x - 1][this.y + 1])
-    }
-    if (this.y > 0) neighbors.push(board[this.x][this.y - 1])
-    if (this.y < board[this.x].length - 1)
-      neighbors.push(board[this.x][this.y + 1])
-    if (this.x < board.length - 1) {
-      if (this.y > 0) neighbors.push(board[this.x + 1][this.y - 1])
-      if (this.y < board[this.x].length - 1)
-        neighbors.push(board[this.x + 1][this.y + 1])
-      neighbors.push(board[this.x + 1][this.y])
-    }
+    const x = this.x,
+      y = this.y
+    const neighbors: SquareModel[] = [
+      board[x - 1][y],
+      board[x - 1][y - 1],
+      board[x - 1][y + 1],
+      board[x][y - 1],
+      board[x][y + 1],
+      board[x + 1][y - 1],
+      board[x + 1][y + 1],
+      board[x + 1][y]
+    ]
+
     return neighbors.reduce(
       (total, neighbor) => total + (neighbor.status === Status.Alive ? 1 : 0),
       0
@@ -43,6 +41,7 @@ class SquareModel {
   }
 
   get nextStatus(): Status {
+    //game rules
     if (board[this.x][this.y].status === Status.Alive) {
       if (board[this.x][this.y].livingNeighbors < 2) return Status.Dead
       if (board[this.x][this.y].livingNeighbors > 3) return Status.Dead
@@ -52,18 +51,20 @@ class SquareModel {
       return Status.Dead
     }
   }
+
+  flip() {
+    this.status = this.status === Status.Dead ? Status.Alive : Status.Dead
+  }
 }
 
-const board: SquareModel[][] = new Array(10)
+const length = 40
+const board: SquareModel[][] = new Array(length)
   .fill(null)
   .map((_, x) =>
-    new Array(10).fill(null).map((_, y) => new SquareModel(x, y, Status.Dead))
+    new Array(length)
+      .fill(null)
+      .map((_, y) => new SquareModel(x, y, Status.Dead))
   )
-
-const flipSquare = action(
-  (square: SquareModel) =>
-    (square.status = square.status === Status.Dead ? Status.Alive : Status.Dead)
-)
 
 const LineDiv = styled.div`
   margin: 0;
@@ -72,13 +73,16 @@ const LineDiv = styled.div`
 `
 
 const Button = styled.button`
-  display: block;
-  margin: 0 auto;
   font-family: Arial, Helvetica, sans-serif;
   font-weight: bold;
   background-color: lightgreen;
   padding: 5px 15px;
   margin-top: 10px;
+`
+
+const ButtonBar = styled.div`
+  display: flex;
+  justify-content: space-around;
 `
 
 const SquareDiv = styled.div<{ status: Status }>`
@@ -94,10 +98,7 @@ const SquareDiv = styled.div<{ status: Status }>`
 
 const Square = observer(({ x, y }: { x: number; y: number }) => {
   return (
-    <SquareDiv
-      status={board[x][y].status}
-      onClick={() => flipSquare(board[x][y])}
-    />
+    <SquareDiv status={board[x][y].status} onClick={() => board[x][y].flip()} />
   )
 })
 
@@ -106,38 +107,69 @@ export default function App() {
 
   return (
     <div style={{ width: 'fit-content' }}>
-      {new Array(10).fill(null).map((_, i) => (
-        <LineDiv key={i}>
-          {new Array(10).fill(null).map((_, j) => (
-            <Square key={j} x={i} y={j} />
-          ))}
-        </LineDiv>
-      ))}
-      <Button
-        onClick={() => {
-          if (run) {
-            clearInterval(run)
-            setRun(null)
-          } else
-            setRun(
-              setInterval(() => {
-                const changingSquares = board
-                  .flat()
-                  .filter(square => square.status !== square.nextStatus)
-                  .map(s => ({ ...s, nextStatus: s.nextStatus }))
-                console.log(changingSquares)
-                runInAction(() =>
-                  changingSquares.forEach(
-                    change =>
-                      (board[change.x][change.y].status = change.nextStatus)
+      {board
+        .filter((_, x) => x > 0 && x < board.length - 1)
+        .map((line, x) => (
+          <LineDiv key={x}>
+            {line
+              .filter((_, y) => y > 0 && y < line.length - 1)
+              .map((square, y) => (
+                <Square key={y} x={square.x} y={square.y} />
+              ))}
+          </LineDiv>
+        ))}
+      <ButtonBar>
+        <Button
+          onClick={() => {
+            if (run) {
+              clearInterval(run)
+              setRun(null)
+            } else
+              setRun(
+                setInterval(() => {
+                  const changingSquares = board
+                    .flat()
+                    // create a frame at the border line without neighbors
+                    .filter(
+                      square =>
+                        square.x > 0 &&
+                        square.x < board.length - 1 &&
+                        square.y > 0 &&
+                        square.y < board.length - 1
+                    )
+                    .filter(square => square.status !== square.nextStatus)
+                    .map(s => ({ ...s, nextStatus: s.nextStatus }))
+                  runInAction(() =>
+                    changingSquares.forEach(
+                      change =>
+                        (board[change.x][change.y].status = change.nextStatus)
+                    )
                   )
-                )
-              }, 100)
-            )
-        }}
-      >
-        {run ? 'Stop' : 'Start'}
-      </Button>
+                }, 1)
+              )
+          }}
+        >
+          {run ? 'Stop' : 'Start'}
+        </Button>
+        <Button
+          onClick={() =>
+            board
+              .flat()
+              .filter(
+                square =>
+                  square.x > 0 &&
+                  square.x < board.length - 1 &&
+                  square.y > 0 &&
+                  square.y < board.length - 1
+              )
+              .forEach(square => {
+                if (Math.random() > 0.5) square.flip()
+              })
+          }
+        >
+          Random
+        </Button>
+      </ButtonBar>
     </div>
   )
 }
