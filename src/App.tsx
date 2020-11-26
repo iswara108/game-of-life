@@ -1,6 +1,6 @@
 import * as React from 'react'
 import styled from 'styled-components'
-import { makeAutoObservable, runInAction } from 'mobx'
+import { autorun, makeAutoObservable, runInAction } from 'mobx'
 import { observer } from 'mobx-react-lite'
 
 enum Status {
@@ -12,29 +12,18 @@ class SquareModel {
   x: number
   y: number
   status: Status
+  neighbors: SquareModel[]
 
   constructor(x: number, y: number, status: Status) {
-    makeAutoObservable(this)
     this.x = x
     this.y = y
     this.status = status
+    this.neighbors = []
+    makeAutoObservable(this)
   }
 
   get livingNeighbors(): number {
-    const x = this.x,
-      y = this.y
-    const neighbors: SquareModel[] = [
-      board[x - 1][y],
-      board[x - 1][y - 1],
-      board[x - 1][y + 1],
-      board[x][y - 1],
-      board[x][y + 1],
-      board[x + 1][y - 1],
-      board[x + 1][y + 1],
-      board[x + 1][y]
-    ]
-
-    return neighbors.reduce(
+    return this.neighbors.reduce(
       (total, neighbor) => total + (neighbor.status === Status.Alive ? 1 : 0),
       0
     )
@@ -42,12 +31,12 @@ class SquareModel {
 
   get nextStatus(): Status {
     //game rules
-    if (board[this.x][this.y].status === Status.Alive) {
-      if (board[this.x][this.y].livingNeighbors < 2) return Status.Dead
-      if (board[this.x][this.y].livingNeighbors > 3) return Status.Dead
+    if (this.status === Status.Alive) {
+      if (this.livingNeighbors < 2) return Status.Dead
+      if (this.livingNeighbors > 3) return Status.Dead
       return Status.Alive
     } else {
-      if (board[this.x][this.y].livingNeighbors === 3) return Status.Alive
+      if (this.livingNeighbors === 3) return Status.Alive
       return Status.Dead
     }
   }
@@ -65,6 +54,22 @@ const board: SquareModel[][] = new Array(length)
       .fill(null)
       .map((_, y) => new SquareModel(x, y, Status.Dead))
   )
+
+for (let x = 1; x < length - 1; x++) {
+  for (let y = 1; y < length - 1; y++) {
+    const neighbors: SquareModel[] = [
+      board[x - 1][y],
+      board[x - 1][y - 1],
+      board[x - 1][y + 1],
+      board[x][y - 1],
+      board[x][y + 1],
+      board[x + 1][y - 1],
+      board[x + 1][y + 1],
+      board[x + 1][y]
+    ]
+    runInAction(() => (board[x][y].neighbors = neighbors))
+  }
+}
 
 const LineDiv = styled.div`
   margin: 0;
@@ -173,3 +178,9 @@ export default function App() {
     </div>
   )
 }
+
+board
+  .flat()
+  .forEach(square =>
+    autorun(() => console.log(square.x, square.y, square.status))
+  )
