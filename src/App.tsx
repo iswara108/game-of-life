@@ -1,6 +1,6 @@
 import * as React from 'react'
 import styled from 'styled-components'
-import { makeAutoObservable, action } from 'mobx'
+import { makeAutoObservable, action, runInAction } from 'mobx'
 import { observer } from 'mobx-react-lite'
 enum Status {
   Dead,
@@ -52,10 +52,6 @@ class SquareModel {
       return Status.Dead
     }
   }
-
-  setStatus(status: Status) {
-    this.status = status
-  }
 }
 
 const board: SquareModel[][] = new Array(10)
@@ -85,17 +81,11 @@ const Button = styled.button`
   margin-top: 10px;
 `
 
-const SquareDiv = styled.div<{ status: Status; nextStatus: Status }>`
+const SquareDiv = styled.div<{ status: Status }>`
   width: 20px;
   height: 20px;
   background-color: ${props =>
-    props.status === Status.Alive && props.nextStatus === Status.Alive
-      ? '#444'
-      : props.status === Status.Alive && props.nextStatus === Status.Dead
-      ? '#644'
-      : props.status === Status.Dead && props.nextStatus === Status.Alive
-      ? '#a94'
-      : '#aaa'};
+    props.status === Status.Alive ? '#444' : '#aaa'};
   border-width: 1px;
   border-color: yellow;
   margin: 0 1px;
@@ -106,26 +96,14 @@ const Square = observer(({ x, y }: { x: number; y: number }) => {
   return (
     <SquareDiv
       status={board[x][y].status}
-      // nextStatus={board[x][y].nextStatus}
-      nextStatus={board[x][y].status}
       onClick={() => flipSquare(board[x][y])}
-      onMouseOver={() =>
-        console.log(
-          x,
-          y,
-          'status',
-          board[x][y].status,
-          'neighbors',
-          board[x][y].livingNeighbors,
-          'next',
-          board[x][y].nextStatus
-        )
-      }
     />
   )
 })
 
 export default function App() {
+  const [run, setRun] = React.useState<number | null>(null)
+
   return (
     <div style={{ width: 'fit-content' }}>
       {new Array(10).fill(null).map((_, i) => (
@@ -137,20 +115,28 @@ export default function App() {
       ))}
       <Button
         onClick={() => {
-          setInterval(() => {
-            const nextStatusBoard = board.map((line, x) =>
-              line.map((square, y) => square.nextStatus)
+          if (run) {
+            clearInterval(run)
+            setRun(null)
+          } else
+            setRun(
+              setInterval(() => {
+                const changingSquares = board
+                  .flat()
+                  .filter(square => square.status !== square.nextStatus)
+                  .map(s => ({ ...s, nextStatus: s.nextStatus }))
+                console.log(changingSquares)
+                runInAction(() =>
+                  changingSquares.forEach(
+                    change =>
+                      (board[change.x][change.y].status = change.nextStatus)
+                  )
+                )
+              }, 100)
             )
-
-            board.forEach((line, x) =>
-              line.forEach((square, y) =>
-                square.setStatus(nextStatusBoard[x][y])
-              )
-            )
-          }, 1000)
         }}
       >
-        Start
+        {run ? 'Stop' : 'Start'}
       </Button>
     </div>
   )
